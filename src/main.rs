@@ -2,7 +2,9 @@ use std::env;
 use std::path::Path;
 use std::process;
 
+mod cli;
 mod config;
+mod toggl;
 
 fn main() {
     let home = match env::var("HOME") {
@@ -17,10 +19,8 @@ fn main() {
 
     let config = config::load(&config_path, &credentials_path);
 
-    /*
-    TODO: algorithm t
-    */
-    println!("{}", config.projects[0].name);
+    cli::cli(&config);
+
     return;
 }
 
