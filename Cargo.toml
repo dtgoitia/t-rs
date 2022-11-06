@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 clap = "4.0.19"
+dialoguer = { version = "0.10.2", features =["fuzzy-select"] }
 serde = { version = "*", features = ["derive"] }
 serde_jsonrc = "0.1.0"
