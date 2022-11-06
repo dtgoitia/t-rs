@@ -4,6 +4,7 @@ use std::process;
 
 mod cli;
 mod config;
+mod domain;
 mod toggl;
 
 fn main() {

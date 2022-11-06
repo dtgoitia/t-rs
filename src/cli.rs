@@ -1,5 +1,5 @@
 use crate::config;
-use crate::toggl;
+use crate::domain;
 use clap::Command;
 
 pub fn cli(config: &config::AppConfig) {
@@ -11,9 +11,9 @@ pub fn cli(config: &config::AppConfig) {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("status", _)) => return toggl::status(&config),
-        Some(("start", _)) => return toggl::start(&config),
-        Some(("stop", _)) => return toggl::stop(&config),
-        _ => return toggl::start(&config),
+        Some(("status", _)) => return domain::show_toggl_status(&config),
+        Some(("start", _)) => return domain::start_toggl_timer(&config),
+        Some(("stop", _)) => return domain::stop_toggl_timer(&config),
+        _ => return domain::start_toggl_timer(&config),
     };
 }
