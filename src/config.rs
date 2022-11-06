@@ -12,14 +12,14 @@ pub fn load(config_path: &Path, credentials_path: &Path) -> AppConfig {
 
 pub struct AppConfig {
     pub projects: Vec<Project>,
-    pub api_token: ToggleApiToken,
+    pub api_token: TogglApiToken,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Project {
-    pub id: ToggleProjectId,
-    pub name: ToggleProjectName,
-    pub entries: Vec<ToggleEntryName>,
+    pub id: TogglProjectId,
+    pub name: TogglProjectName,
+    pub entries: Vec<TogglEntryName>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -29,13 +29,13 @@ struct RawConfig {
 
 #[derive(Serialize, Deserialize)]
 struct RawCredentials {
-    toggle_api_token: ToggleApiToken,
+    toggle_api_token: TogglApiToken,
 }
 
-type ToggleProjectId = i32;
-type ToggleProjectName = String;
-type ToggleEntryName = String;
-type ToggleApiToken = String;
+pub type TogglProjectId = i32;
+type TogglProjectName = String;
+pub type TogglEntryName = String;
+type TogglApiToken = String;
 
 fn parse(config_path: &Path, credentials_path: &Path) -> AppConfig {
     let raw_config: RawConfig = parse_config(config_path);
