@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, process};
 
+use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName};
+
 pub fn load(config_path: &Path, credentials_path: &Path) -> AppConfig {
     abort_if_config_file_does_not_exit(config_path);
     abort_if_credentials_file_does_not_exit(credentials_path);
@@ -32,9 +34,6 @@ struct RawCredentials {
     toggle_api_token: TogglApiToken,
 }
 
-pub type TogglProjectId = i32;
-type TogglProjectName = String;
-pub type TogglEntryName = String;
 type TogglApiToken = String;
 
 fn parse(config_path: &Path, credentials_path: &Path) -> AppConfig {

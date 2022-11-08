@@ -6,6 +6,7 @@ mod cli;
 mod config;
 mod domain;
 mod toggl;
+mod types;
 
 fn main() {
     let home = match env::var("HOME") {

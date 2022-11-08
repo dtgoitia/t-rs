@@ -3,7 +3,6 @@ use crate::domain;
 use clap::Command;
 
 pub fn cli(config: &config::AppConfig) {
-    println!("{}", config.projects[0].name);
     let matches = Command::new("t")
         .subcommand(Command::new("start").about("start timer"))
         .subcommand(Command::new("stop").about("stop timer"))
