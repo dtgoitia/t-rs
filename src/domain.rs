@@ -33,8 +33,30 @@ pub fn start_toggl_timer(config: &AppConfig) {
     };
 }
 
-pub fn stop_toggl_timer(config: &AppConfig) {
-    toggl::stop(&config);
+pub fn stop_toggl_timer(config: &AppConfig) -> () {
+    let stopped_entry = match toggl::stop(&config) {
+        Ok(value) => value,
+        Err(error) => return println!("{:#?}", error),
+    };
+
+    let end = match stopped_entry.stop {
+        Some(value) => value,
+        None => {
+            return println!(
+                "Expected stopped entry to have an \"end\", but got this instead:\n{:#?}",
+                stopped_entry
+            )
+        }
+    };
+
+    let elapsed = format_duration(end - stopped_entry.start);
+    let project_name = get_project_name_by_id(stopped_entry.project_id, &config);
+    println!(
+        "Stopped: {description} @ {project}  {elapsed}",
+        description = stopped_entry.description,
+        project = project_name,
+        elapsed = elapsed
+    );
 }
 
 fn get_project_name_by_id(id: TogglProjectId, config: &AppConfig) -> TogglProjectName {

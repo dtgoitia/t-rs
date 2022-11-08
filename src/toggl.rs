@@ -1,4 +1,4 @@
-use crate::types::TogglProjectId;
+use crate::types::{TogglEntryId, TogglProjectId, TogglWorkspaceId};
 use crate::{config::AppConfig, types::TogglEntryDescription};
 use chrono::{DateTime, Utc};
 use reqwest::{self, blocking::Client, Url};
@@ -18,8 +18,17 @@ pub fn get_current_time_entry(config: &AppConfig) -> Option<TimeEntry> {
     return entry;
 }
 
-pub fn stop(config: &AppConfig) {
-    println!("Timer stopped! token {}", config.api_token.as_str());
+pub fn stop(config: &AppConfig) -> Result<TimeEntry, TogglError> {
+    let client = get_toggl_client(config.api_token.to_string());
+    let running_entry = match client.get_current_time_entry() {
+        Ok(Some(value)) => value,
+        Ok(None) => return Err(TogglError::NoRuningTimeEntryFound),
+        Err(error) => return Err(error),
+    };
+
+    let stopped_entry = client.stop_entry(&running_entry)?;
+
+    return Ok(stopped_entry);
 }
 
 struct TogglHttpClient {
@@ -44,18 +53,21 @@ fn get_toggl_client(token: String) -> TogglHttpClient {
     return toggl;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TimeEntry {
+    pub id: TogglEntryId,
     pub project_id: TogglProjectId,
+    pub workspace_id: TogglWorkspaceId,
     pub description: TogglEntryDescription,
     pub start: DateTime<Utc>,
-    // TODO: add start - at domain level calculate elapsed time since start
+    pub stop: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
-enum TogglError {
+pub enum TogglError {
     Reqwest(reqwest::Error),
     SerdeJsonrc(serde_jsonrc::Error),
+    NoRuningTimeEntryFound,
 }
 
 impl std::fmt::Display for TogglError {
@@ -65,6 +77,7 @@ impl std::fmt::Display for TogglError {
             TogglError::SerdeJsonrc(e) => {
                 write!(f, "Deserialization of Toggl API response failed: {}", e)
             }
+            TogglError::NoRuningTimeEntryFound => write!(f, "No running time entry found"),
         };
     }
 }
@@ -89,6 +102,19 @@ impl TogglHttpClient {
         let response = self
             .client
             .get(url)
+            .basic_auth(&(self.token), Some("api_token"))
+            .send()?;
+        // println!("Status: {}", response.status());
+        let body = response.text()?;
+        return Ok(body);
+    }
+
+    fn patch(&self, path: &str) -> Result<String, reqwest::Error> {
+        let url = self.base_url.join(path).expect("failed to build URL");
+
+        let response = self
+            .client
+            .patch(url)
             .basic_auth(&(self.token), Some("api_token"))
             .send()?;
         // println!("Status: {}", response.status());
@@ -131,5 +157,20 @@ impl TogglHttpClient {
         let entry: TimeEntry = serde_jsonrc::from_str(&body)?;
 
         return Ok(Some(entry));
+    }
+
+    pub fn stop_entry(&self, entry: &TimeEntry) -> Result<TimeEntry, TogglError> {
+        /*
+        curl -u <email>:<password> \
+        -X PATCH https://api.track.toggl.com/api/v9/workspaces/{workspace_id}/time_entries/{time_entry_id}/stop
+         */
+        let path = format!(
+            "/api/v9/workspaces/{workspace_id}/time_entries/{time_entry_id}/stop",
+            workspace_id = entry.workspace_id,
+            time_entry_id = entry.id
+        );
+        let body = self.patch(&path)?;
+        let stopped_entry: TimeEntry = serde_jsonrc::from_str(&body)?;
+        return Ok(stopped_entry);
     }
 }
