@@ -1,12 +1,20 @@
 use crate::types::{TogglEntryId, TogglProjectId, TogglWorkspaceId};
 use crate::{config::AppConfig, types::TogglEntryDescription};
 use chrono::{DateTime, Utc};
+use reqwest::header::CONTENT_TYPE;
 use reqwest::{self, blocking::Client, Url};
 use serde::{Deserialize, Serialize};
+use serde_jsonrc;
 
-pub fn start(config: &AppConfig, project_id: TogglProjectId) {
-    println!("Starting a time entry in {} project ...", project_id);
-    println!("Timer started! token {}", config.api_token.as_str());
+pub fn start(
+    config: &AppConfig,
+    project_id: TogglProjectId,
+    description: TogglEntryDescription,
+    start: DateTime<Utc>,
+) -> Result<V8TimeEntry, TogglError> {
+    let client = get_toggl_client(config.api_token.to_string());
+    let running_entry = client.start_entry(&project_id, description, start)?;
+    return Ok(running_entry);
 }
 
 pub fn get_current_time_entry(config: &AppConfig) -> Option<TimeEntry> {
@@ -109,6 +117,22 @@ impl TogglHttpClient {
         return Ok(body);
     }
 
+    fn post(&self, path: &str, body: &str) -> Result<String, reqwest::Error> {
+        let url = self.base_url.join(path).expect("failed to build URL");
+
+        let response = self
+            .client
+            .post(url)
+            .body(body.to_string())
+            .basic_auth(&(self.token), Some("api_token"))
+            .header(CONTENT_TYPE, "application/json")
+            .send()?;
+
+        let body = response.text()?;
+
+        return Ok(body);
+    }
+
     fn patch(&self, path: &str) -> Result<String, reqwest::Error> {
         let url = self.base_url.join(path).expect("failed to build URL");
 
@@ -120,6 +144,30 @@ impl TogglHttpClient {
         // println!("Status: {}", response.status());
         let body = response.text()?;
         return Ok(body);
+    }
+
+    pub fn start_entry(
+        &self,
+        project_id: &TogglProjectId,
+        description: TogglEntryDescription,
+        start: DateTime<Utc>,
+    ) -> Result<V8TimeEntry, TogglError> {
+        // TODO: update to API v9
+        let request_body = serde_jsonrc::json!({
+            "time_entry": {
+                "created_with": "t-rs",
+                "start": start.to_rfc3339(),
+                "description": &description,
+                "pid": &project_id,
+            },
+        })
+        .to_string();
+
+        let path = "/api/v8/time_entries/start";
+        let response_body = self.post(&path, &request_body)?;
+
+        let response_data: TogglV8StartResponse = serde_jsonrc::from_str(&response_body)?;
+        return Ok(response_data.data);
     }
 
     pub fn get_current_time_entry(&self) -> Result<Option<TimeEntry>, TogglError> {
@@ -173,4 +221,19 @@ impl TogglHttpClient {
         let stopped_entry: TimeEntry = serde_jsonrc::from_str(&body)?;
         return Ok(stopped_entry);
     }
+}
+
+#[derive(Deserialize, Debug)]
+struct TogglV8StartResponse {
+    data: V8TimeEntry,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct V8TimeEntry {
+    pub id: TogglEntryId,
+    #[serde(rename = "pid")]
+    pub project_id: TogglProjectId,
+    pub description: TogglEntryDescription,
+    pub start: DateTime<Utc>,
+    pub stop: Option<DateTime<Utc>>,
 }

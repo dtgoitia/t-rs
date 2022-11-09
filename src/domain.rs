@@ -19,7 +19,6 @@ pub fn show_toggl_status(config: &AppConfig) {
 }
 
 pub fn start_toggl_timer(config: &AppConfig) {
-    println!("Timer started! token {}", config.api_token.as_str());
     let (toggle_items, selection_items) = build_selection_items_from(&config);
     let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
         .items(&selection_items)
@@ -27,9 +26,21 @@ pub fn start_toggl_timer(config: &AppConfig) {
         .interact_on_opt(&Term::stderr())
         .expect("TODO: handle this error");
 
-    match selection {
-        Some(index) => return toggl::start(&config, toggle_items[index].project_id),
-        None => println!("USer did not select anything"),
+    let entry = match selection {
+        Some(index) => &toggle_items[index],
+        None => return println!("You apparently selected nothing :S"),
+    };
+
+    let now = chrono::Utc::now();
+
+    match toggl::start(
+        &config,
+        entry.project_id,
+        entry.description.to_string(),
+        now,
+    ) {
+        Ok(_) => return println!("Successfully started"),
+        Err(error) => return println!("Failed to start Toggl time entry, reason: {}", error),
     };
 }
 
@@ -66,6 +77,7 @@ fn get_project_name_by_id(id: TogglProjectId, config: &AppConfig) -> TogglProjec
         }
     }
 
+    // TODO: return this as an error and let the caller print message and handle it
     println!("WARNING: could not find project name for {} project ID", id);
     return id.to_string();
 }
@@ -100,7 +112,7 @@ fn format_duration(elapsed: Duration) -> String {
 
 struct SelectableTogglItem {
     pub project_id: TogglProjectId,
-    pub entry_name: TogglEntryName,
+    pub description: TogglEntryName,
 }
 type TogglItems = Vec<SelectableTogglItem>;
 type SelectionItems = Vec<String>;
@@ -119,7 +131,7 @@ fn build_selection_items_from(config: &AppConfig) -> (TogglItems, SelectionItems
         for entry in project.entries.iter() {
             let toggl_item = SelectableTogglItem {
                 project_id: project.id,
-                entry_name: entry.to_string(),
+                description: entry.to_string(),
             };
             toggl_items.push(toggl_item);
 
