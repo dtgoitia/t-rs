@@ -39,6 +39,36 @@ pub fn stop(config: &AppConfig) -> Result<TimeEntry, TogglError> {
     return Ok(stopped_entry);
 }
 
+/// Swap the ongoing time entry with another one given a description and a project.
+///
+/// # Errors
+///
+/// This method fails if there is no ongoing time entry.
+pub fn swap(
+    config: &AppConfig,
+    project_id: TogglProjectId,
+    description: TogglEntryDescription,
+) -> Result<(), TogglError> {
+    let client = get_toggl_client(config.api_token.to_string());
+    let running = match client.get_current_time_entry() {
+        Ok(Some(value)) => value,
+        Ok(None) => return Err(TogglError::NoRuningTimeEntryFound),
+        Err(error) => return Err(error),
+    };
+
+    let desired = &TimeEntry {
+        id: running.id,
+        project_id,
+        workspace_id: running.workspace_id,
+        description,
+        start: running.start,
+        stop: running.stop,
+        duration: running.duration,
+    };
+
+    client.put_entry(desired)
+}
+
 struct TogglHttpClient {
     base_url: Url,
     token: String,
@@ -69,6 +99,7 @@ pub struct TimeEntry {
     pub description: TogglEntryDescription,
     pub start: DateTime<Utc>,
     pub stop: Option<DateTime<Utc>>,
+    pub duration: i64,
 }
 
 #[derive(Debug)]
@@ -142,6 +173,21 @@ impl TogglHttpClient {
             .basic_auth(&(self.token), Some("api_token"))
             .send()?;
         // println!("Status: {}", response.status());
+        let body = response.text()?;
+        return Ok(body);
+    }
+
+    fn put(&self, path: &str, body: &str) -> Result<String, reqwest::Error> {
+        let url = self.base_url.join(path).expect("failed to build URL");
+
+        let response = self
+            .client
+            .put(url)
+            .body(body.to_string())
+            .basic_auth(&(self.token), Some("api_token"))
+            .header(CONTENT_TYPE, "application/json")
+            .send()?;
+
         let body = response.text()?;
         return Ok(body);
     }
@@ -220,6 +266,29 @@ impl TogglHttpClient {
         let body = self.patch(&path)?;
         let stopped_entry: TimeEntry = serde_jsonrc::from_str(&body)?;
         return Ok(stopped_entry);
+    }
+
+    pub fn put_entry(&self, entry: &TimeEntry) -> Result<(), TogglError> {
+        let path = format!(
+            "https://api.track.toggl.com/api/v9/workspaces/{workspace_id}/time_entries/{time_entry_id}",
+            workspace_id=entry.workspace_id,
+            time_entry_id=entry.id,
+        );
+
+        let request_body = serde_jsonrc::json!({
+            "created_with": "t-rs",
+            "start": entry.start.to_rfc3339(),
+            "description": &entry.description,
+            "project-id": &entry.project_id,
+            "tags":[],
+            "billable": false,
+            "workspace_id": entry.workspace_id,
+            "duration": entry.duration,
+        })
+        .to_string();
+
+        self.put(&path, &request_body)?;
+        return Ok(());
     }
 }
 

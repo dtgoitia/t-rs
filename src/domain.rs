@@ -2,7 +2,7 @@ use chrono::Duration;
 use dialoguer::{console::Term, theme::ColorfulTheme, FuzzySelect};
 
 use crate::config::AppConfig;
-use crate::toggl;
+use crate::toggl::{self, TimeEntry};
 use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName};
 
 pub fn show_toggl_status(config: &AppConfig) {
@@ -11,23 +11,12 @@ pub fn show_toggl_status(config: &AppConfig) {
         None => return println!("No time entry running"),
     };
 
-    let now = chrono::Utc::now();
-    let elapsed = format_duration(now - entry.start);
-    let project_name = get_project_name_by_id(entry.project_id, &config);
-
-    println!("{} @ {}   {}", entry.description, project_name, elapsed);
+    print_running_entry(config, &entry)
 }
 
 pub fn start_toggl_timer(config: &AppConfig) {
-    let (toggle_items, selection_items) = build_selection_items_from(&config);
-    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-        .items(&selection_items)
-        .default(0)
-        .interact_on_opt(&Term::stderr())
-        .expect("TODO: handle this error");
-
-    let entry = match selection {
-        Some(index) => &toggle_items[index],
+    let selected = match select_entry(&config) {
+        Some(selected) => selected,
         None => return println!("You apparently selected nothing :S"),
     };
 
@@ -35,8 +24,8 @@ pub fn start_toggl_timer(config: &AppConfig) {
 
     match toggl::start(
         &config,
-        entry.project_id,
-        entry.description.to_string(),
+        selected.project_id,
+        selected.description.to_string(),
         now,
     ) {
         Ok(_) => return println!("Successfully started"),
@@ -68,6 +57,55 @@ pub fn stop_toggl_timer(config: &AppConfig) -> () {
         project = project_name,
         elapsed = elapsed
     );
+}
+
+pub fn swap_current_toggl_timer(config: &AppConfig) -> () {
+    let entry = match toggl::get_current_time_entry(&config) {
+        Some(value) => value,
+        None => return println!("No time entry running"),
+    };
+
+    print_running_entry(config, &entry);
+
+    let selected = match select_entry(&config) {
+        Some(selected) => selected,
+        None => return println!("You apparently selected nothing :S"),
+    };
+
+    let project = get_project_name_by_id(selected.project_id, &config);
+
+    println!(
+        "Updating current entry to: {description} @ {project}",
+        description = &selected.description,
+        project = project
+    );
+
+    match toggl::swap(&config, selected.project_id, selected.description) {
+        Ok(_) => return println!("Successfully updated"),
+        Err(error) => return println!("Failed to update Toggl time entry, reason: {}", error),
+    };
+}
+
+fn print_running_entry(config: &AppConfig, entry: &TimeEntry) -> () {
+    let now = chrono::Utc::now();
+    let elapsed = format_duration(now - entry.start);
+    let project_name = get_project_name_by_id(entry.project_id, &config);
+
+    println!("{} @ {}   {}", entry.description, project_name, elapsed);
+}
+
+fn select_entry(config: &AppConfig) -> Option<SelectableTogglItem> {
+    let (toggle_items, selection_items) = build_selection_items_from(&config);
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .items(&selection_items)
+        .default(0)
+        .interact_on_opt(&Term::stderr())
+        .expect("TODO: handle this error");
+
+    return match selection {
+        Some(index) => Some(toggle_items[index].clone()),
+        None => return None,
+    };
 }
 
 fn get_project_name_by_id(id: TogglProjectId, config: &AppConfig) -> TogglProjectName {
@@ -110,6 +148,7 @@ fn format_duration(elapsed: Duration) -> String {
     return chunks.join(" ");
 }
 
+#[derive(Clone)]
 struct SelectableTogglItem {
     pub project_id: TogglProjectId,
     pub description: TogglEntryName,
