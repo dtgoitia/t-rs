@@ -66,6 +66,11 @@ pub fn swap(
         duration: running.duration,
     };
 
+    if &running == desired {
+        println!("No need to swap, desired entry is already running");
+        return Ok(());
+    }
+
     client.put_entry(desired)
 }
 
@@ -91,7 +96,7 @@ fn get_toggl_client(token: String) -> TogglHttpClient {
     return toggl;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct TimeEntry {
     pub id: TogglEntryId,
     pub project_id: TogglProjectId,
