@@ -26,6 +26,16 @@ pub fn get_current_time_entry(config: &AppConfig) -> Option<TimeEntry> {
     return entry;
 }
 
+pub fn get_last_entries(config: &AppConfig) -> Vec<TimeEntry> {
+    let client = get_toggl_client(config.api_token.to_string());
+    let today_noon = chrono::Utc::today().and_hms(0, 0, 0);
+    let entries = client
+        .get_time_entries(today_noon)
+        .expect("failed to get entries since noon");
+
+    return entries;
+}
+
 pub fn stop(config: &AppConfig) -> Result<TimeEntry, TogglError> {
     let client = get_toggl_client(config.api_token.to_string());
     let running_entry = match client.get_current_time_entry() {
@@ -44,7 +54,7 @@ pub fn stop(config: &AppConfig) -> Result<TimeEntry, TogglError> {
 /// # Errors
 ///
 /// This method fails if there is no ongoing time entry.
-pub fn swap(
+pub fn swap_description_or_project(
     config: &AppConfig,
     project_id: TogglProjectId,
     description: TogglEntryDescription,
@@ -56,22 +66,21 @@ pub fn swap(
         Err(error) => return Err(error),
     };
 
-    let desired = &TimeEntry {
-        id: running.id,
-        project_id,
-        workspace_id: running.workspace_id,
-        description,
-        start: running.start,
-        stop: running.stop,
-        duration: running.duration,
-    };
+    let desired = running
+        .set_project_id(project_id)
+        .set_description(description);
 
-    if &running == desired {
+    if running == desired {
         println!("No need to swap, desired entry is already running");
         return Ok(());
     }
 
-    client.put_entry(desired)
+    client.put_entry(&desired)
+}
+
+pub fn replace_entry(config: &AppConfig, entry: TimeEntry) -> Result<(), TogglError> {
+    let client = get_toggl_client(config.api_token.to_string());
+    client.put_entry(&entry)
 }
 
 struct TogglHttpClient {
@@ -107,6 +116,56 @@ pub struct TimeEntry {
     pub duration: i64,
 }
 
+impl TimeEntry {
+    pub fn set_project_id(&self, project_id: TogglProjectId) -> Self {
+        TimeEntry {
+            id: self.id,
+            project_id: project_id,
+            workspace_id: self.workspace_id,
+            description: self.description.clone(),
+            start: self.start,
+            stop: self.stop,
+            duration: self.duration,
+        }
+    }
+
+    pub fn set_description(&self, description: String) -> Self {
+        TimeEntry {
+            id: self.id,
+            project_id: self.project_id,
+            workspace_id: self.workspace_id,
+            description: description,
+            start: self.start,
+            stop: self.stop,
+            duration: self.duration,
+        }
+    }
+
+    pub fn set_start(&self, start: DateTime<Utc>) -> Self {
+        TimeEntry {
+            id: self.id,
+            project_id: self.project_id,
+            workspace_id: self.workspace_id,
+            description: self.description.clone(),
+            start,
+            stop: self.stop,
+            duration: self.duration,
+        }
+    }
+
+    // pub fn set_stop(&self, stop: DateTime<Utc>) -> Self {
+    //     TimeEntry {
+    //         id: self.id,
+    //         project_id: self.project_id,
+    //         workspace_id: self.workspace_id,
+    //         description: self.description.clone(),
+    //         start: self.start,
+    //         stop: Some(stop),
+    //         duration: self.duration,
+    //     }
+    // }
+}
+
 #[derive(Debug)]
 pub enum TogglError {
     Reqwest(reqwest::Error),
@@ -138,17 +197,30 @@ impl From<serde_jsonrc::Error> for TogglError {
     }
 }
 
+type ToggleHttpClientParams<'a> = Vec<(&'a str, String)>;
+
 impl TogglHttpClient {
-    fn get(&self, path: &str) -> Result<String, reqwest::Error> {
-        let url = self.base_url.join(path).expect("failed to build URL");
-        // println!("URL: {}", url);
+    fn get(
+        &self,
+        path: &str,
+        params: Option<ToggleHttpClientParams>,
+    ) -> Result<String, reqwest::Error> {
+        let url;
+
+        if params.is_some() {
+            let path = format!("{}{}", &self.base_url.to_string(), &path);
+            url = reqwest::Url::parse_with_params(&path, &params.unwrap())
+                .expect("failed to build URL with parameters");
+        } else {
+            url = self.base_url.join(path).expect("failed to build URL");
+        }
 
         let response = self
             .client
             .get(url)
             .basic_auth(&(self.token), Some("api_token"))
             .send()?;
-        // println!("Status: {}", response.status());
+
         let body = response.text()?;
         return Ok(body);
     }
@@ -246,7 +318,7 @@ impl TogglHttpClient {
             }
         }
          */
-        let body = self.get("me/time_entries/current")?;
+        let body = self.get("me/time_entries/current", None)?;
         // println!("{}", body);
 
         if body == "null" {
@@ -256,6 +328,22 @@ impl TogglHttpClient {
         let entry: TimeEntry = serde_jsonrc::from_str(&body)?;
 
         return Ok(Some(entry));
+    }
+
+    /// Get time entries whose start time is betwen `since` and now.
+    pub fn get_time_entries(&self, since: DateTime<Utc>) -> Result<Vec<TimeEntry>, TogglError> {
+        let start = since;
+        let end = chrono::Utc::now();
+
+        let params = vec![
+            ("start_date", start.to_rfc3339()),
+            ("end_date", end.to_rfc3339()),
+        ];
+        let body = self.get("me/time_entries", Some(params))?;
+
+        let entries: Vec<TimeEntry> = serde_jsonrc::from_str(&body)?;
+
+        return Ok(entries);
     }
 
     pub fn stop_entry(&self, entry: &TimeEntry) -> Result<TimeEntry, TogglError> {

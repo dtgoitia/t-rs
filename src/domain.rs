@@ -1,5 +1,8 @@
 use chrono::Duration;
+use dialoguer::Select;
 use dialoguer::{console::Term, theme::ColorfulTheme, FuzzySelect};
+use regex::Regex;
+use text_io;
 
 use crate::config::AppConfig;
 use crate::toggl::{self, TimeEntry};
@@ -72,10 +75,112 @@ pub fn swap_current_toggl_timer(config: &AppConfig) -> () {
         None => return println!("You apparently selected nothing :S"),
     };
 
-    match toggl::swap(&config, selected.project_id, selected.description) {
+    match toggl::swap_description_or_project(&config, selected.project_id, selected.description) {
         Ok(_) => return,
         Err(error) => return println!("Failed to update Toggl time entry, reason: {}", error),
     };
+}
+
+pub fn shift_current_toggl_timer(config: &AppConfig) -> () {
+    // get last 6h entries
+    /*
+
+    1.  show list of entries today and ask user to pick which one
+        should modify:
+
+        ```
+        General   YLD   09:30 - 10:00  30m
+        Meeting   YLD   10:00 -  ...   32m 1s
+
+        Select current entry:  (usual autocompletion)
+        ```
+
+    2.  ask when should the new entry started, and clarify that if
+        last meeting will be pushed back to accommodate this start
+        time
+
+        ```
+        Select start time:
+        ```
+        find a good way of introducing either a time, or a duration
+        (x mins ago)
+
+    3.  Show confirmation screen to ensure that the user is aware
+        of how will the previous entry and the new one look like:
+
+        ```
+        General   YLD   09:30 - 10:00  30m
+        Meeting   YLD   10:00 - 10:15  15m
+        Coding    YLD   10:15 -  ...   17m 4s
+
+        Happy? [Y]/n
+        ```
+
+        And if the previous entry is being completely removed,
+        raise an error and ask the user to use the toggl webapp
+        directly to handle this situation.
+
+    */
+    let last_entries = toggl::get_last_entries(&config);
+
+    println!("Which entry do you want to shift backwards?");
+    let formated = last_entries
+        .iter()
+        .map(|entry| format_entry(entry, &config))
+        .collect::<Vec<String>>();
+
+    let to_shift_index = Select::with_theme(&ColorfulTheme::default())
+        .items(&formated)
+        .default(0)
+        .interact_on_opt(&Term::stderr())
+        .unwrap()
+        .expect("baaaad");
+
+    let to_shift = &last_entries[to_shift_index];
+    println!("{:?}", &to_shift);
+
+    // Select start time
+    println!("Type start time (hh:mm)");
+    let line: String = text_io::read!("{}\n");
+    let new_start = parse_time(line);
+    println!("{:?}", new_start);
+
+    println!("{:?}", to_shift);
+    let shifted = to_shift.set_start(new_start.into());
+    println!("{:?}", shifted);
+    match toggl::replace_entry(config, shifted) {
+        Ok(_) => return,
+        Err(error) => return println!("Failed to update Toggl time entry, reason: {}", error),
+    };
+}
+
+fn parse_time(raw: String) -> chrono::DateTime<chrono::Local> {
+    let re = Regex::new(r"^(?P<h>\d{2}):?(?P<m>\d{2})$").unwrap();
+    let captures = re.captures(&raw).unwrap();
+    let h = captures.get(1).unwrap().as_str().parse::<u32>().unwrap();
+    let m = captures.get(2).unwrap().as_str().parse::<u32>().unwrap();
+    chrono::Local::today().and_hms(h, m, 0)
+}
+
+fn format_entry(entry: &TimeEntry, config: &AppConfig) -> String {
+    let end = if entry.stop.is_none() {
+        chrono::Utc::now()
+    } else {
+        entry.stop.unwrap()
+    };
+
+    let delta = format_duration(end.time() - entry.start.time());
+
+    let project_name = get_project_name_by_id(entry.project_id, config);
+
+    return format!(
+        "{:<10}   {:<20}   {} - {}  {}",
+        entry.description,
+        project_name,
+        entry.start.format("%H:%M:%S"),
+        end.format("%H:%M:%S"),
+        delta,
+    );
 }
 
 fn print_running_entry(config: &AppConfig, entry: &TimeEntry) -> () {
