@@ -72,16 +72,8 @@ pub fn swap_current_toggl_timer(config: &AppConfig) -> () {
         None => return println!("You apparently selected nothing :S"),
     };
 
-    let project = get_project_name_by_id(selected.project_id, &config);
-
-    println!(
-        "Updating current entry to: {description} @ {project}",
-        description = &selected.description,
-        project = project
-    );
-
     match toggl::swap(&config, selected.project_id, selected.description) {
-        Ok(_) => return println!("Successfully updated"),
+        Ok(_) => return (),
         Err(error) => return println!("Failed to update Toggl time entry, reason: {}", error),
     };
 }
