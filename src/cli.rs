@@ -11,10 +11,10 @@ pub fn cli(config: &config::AppConfig) {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("status", _)) => return domain::show_toggl_status(&config),
-        Some(("start", _)) => return domain::start_toggl_timer(&config),
-        Some(("stop", _)) => return domain::stop_toggl_timer(&config),
-        Some(("swap", _)) => return domain::swap_current_toggl_timer(&config),
-        _ => return domain::start_toggl_timer(&config),
+        Some(("status", _)) => domain::show_toggl_status(&config),
+        Some(("start", _)) => domain::start_toggl_timer(&config),
+        Some(("stop", _)) => domain::stop_toggl_timer(&config),
+        Some(("swap", _)) => domain::swap_current_toggl_timer(&config),
+        _ => domain::start_toggl_timer(&config),
     };
 }
