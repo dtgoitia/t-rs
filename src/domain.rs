@@ -5,7 +5,7 @@ use crate::config::AppConfig;
 use crate::toggl::{self, TimeEntry};
 use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName};
 
-pub fn show_toggl_status(config: &AppConfig) {
+pub fn show_toggl_status(config: &AppConfig) -> () {
     let entry = match toggl::get_current_time_entry(&config) {
         Some(value) => value,
         None => return println!("No time entry running"),
@@ -14,7 +14,7 @@ pub fn show_toggl_status(config: &AppConfig) {
     print_running_entry(config, &entry)
 }
 
-pub fn start_toggl_timer(config: &AppConfig) {
+pub fn start_toggl_timer(config: &AppConfig) -> () {
     let selected = match select_entry(&config) {
         Some(selected) => selected,
         None => return println!("You apparently selected nothing :S"),
@@ -73,7 +73,7 @@ pub fn swap_current_toggl_timer(config: &AppConfig) -> () {
     };
 
     match toggl::swap(&config, selected.project_id, selected.description) {
-        Ok(_) => return (),
+        Ok(_) => return,
         Err(error) => return println!("Failed to update Toggl time entry, reason: {}", error),
     };
 }
