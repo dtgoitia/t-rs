@@ -8,12 +8,13 @@ use serde_jsonrc;
 
 pub fn start(
     config: &AppConfig,
+    workspace_id: TogglWorkspaceId,
     project_id: TogglProjectId,
     description: TogglEntryDescription,
     start: DateTime<Utc>,
-) -> Result<V8TimeEntry, TogglError> {
+) -> Result<TimeEntry, TogglError> {
     let client = get_toggl_client(config.api_token.to_string());
-    let running_entry = client.start_entry(&project_id, description, start)?;
+    let running_entry = client.start_entry(&workspace_id, &project_id, description, start)?;
     return Ok(running_entry);
 }
 
@@ -199,26 +200,32 @@ impl TogglHttpClient {
 
     pub fn start_entry(
         &self,
+        workspace_id: &TogglWorkspaceId,
         project_id: &TogglProjectId,
         description: TogglEntryDescription,
         start: DateTime<Utc>,
-    ) -> Result<V8TimeEntry, TogglError> {
-        // TODO: update to API v9
+    ) -> Result<TimeEntry, TogglError> {
+        // https://engineering.toggl.com/docs/api/time_entries#post-timeentries
         let request_body = serde_jsonrc::json!({
-            "time_entry": {
-                "created_with": "t-rs",
-                "start": start.to_rfc3339(),
-                "description": &description,
-                "pid": &project_id,
-            },
+            "billable": false,
+            "created_with": "t-rs",
+            "description": &description,
+            "duration": -1,  // must be a negative number for a running entry
+            "project_id": &project_id,
+            "start": start.to_rfc3339(),
+            "workspace_id": &workspace_id.clone(),
+
         })
         .to_string();
 
-        let path = "/api/v8/time_entries/start";
+        let path = format!(
+            "/api/v9/workspaces/{workspace_id}/time_entries",
+            workspace_id = workspace_id,
+        );
         let response_body = self.post(&path, &request_body)?;
 
-        let response_data: TogglV8StartResponse = serde_jsonrc::from_str(&response_body)?;
-        return Ok(response_data.data);
+        let response: TimeEntry = serde_jsonrc::from_str(&response_body)?;
+        return Ok(response);
     }
 
     pub fn get_current_time_entry(&self) -> Result<Option<TimeEntry>, TogglError> {
@@ -295,19 +302,4 @@ impl TogglHttpClient {
         self.put(&path, &request_body)?;
         return Ok(());
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct TogglV8StartResponse {
-    data: V8TimeEntry,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct V8TimeEntry {
-    pub id: TogglEntryId,
-    #[serde(rename = "pid")]
-    pub project_id: TogglProjectId,
-    pub description: TogglEntryDescription,
-    pub start: DateTime<Utc>,
-    pub stop: Option<DateTime<Utc>>,
 }

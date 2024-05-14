@@ -3,7 +3,7 @@ use dialoguer::{console::Term, theme::ColorfulTheme, FuzzySelect};
 
 use crate::config::AppConfig;
 use crate::toggl::{self, TimeEntry};
-use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName};
+use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName, TogglWorkspaceId};
 
 pub fn show_toggl_status(config: &AppConfig) -> () {
     let entry = match toggl::get_current_time_entry(&config) {
@@ -24,6 +24,7 @@ pub fn start_toggl_timer(config: &AppConfig) -> () {
 
     match toggl::start(
         &config,
+        selected.workspace_id,
         selected.project_id,
         selected.description.to_string(),
         now,
@@ -142,6 +143,7 @@ fn format_duration(elapsed: Duration) -> String {
 
 #[derive(Clone)]
 struct SelectableTogglItem {
+    pub workspace_id: TogglWorkspaceId,
     pub project_id: TogglProjectId,
     pub description: TogglEntryName,
 }
@@ -161,6 +163,7 @@ fn build_selection_items_from(config: &AppConfig) -> (TogglItems, SelectionItems
     for project in config.projects.iter() {
         for entry in project.entries.iter() {
             let toggl_item = SelectableTogglItem {
+                workspace_id: project.workspace_id,
                 project_id: project.id,
                 description: entry.to_string(),
             };

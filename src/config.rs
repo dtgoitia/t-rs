@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, process};
 
-use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName};
+use crate::types::{TogglEntryName, TogglProjectId, TogglProjectName, TogglWorkspaceId};
 
 pub fn load(config_path: &Path, credentials_path: &Path) -> AppConfig {
     abort_if_config_file_does_not_exit(config_path);
@@ -22,6 +22,7 @@ pub struct Project {
     pub id: TogglProjectId,
     pub name: TogglProjectName,
     pub entries: Vec<TogglEntryName>,
+    pub workspace_id: TogglWorkspaceId,
 }
 
 #[derive(Serialize, Deserialize)]
