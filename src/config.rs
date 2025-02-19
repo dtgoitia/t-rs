@@ -32,7 +32,7 @@ struct RawConfig {
 
 #[derive(Serialize, Deserialize)]
 struct RawCredentials {
-    toggle_api_token: TogglApiToken,
+    toggl_api_token: TogglApiToken,
 }
 
 type TogglApiToken = String;
@@ -43,7 +43,7 @@ fn parse(config_path: &Path, credentials_path: &Path) -> AppConfig {
 
     let config = AppConfig {
         projects: raw_config.projects,
-        api_token: raw_credentials.toggle_api_token,
+        api_token: raw_credentials.toggl_api_token,
     };
 
     return config;

@@ -88,7 +88,7 @@ fn print_running_entry(config: &AppConfig, entry: &TimeEntry) -> () {
 }
 
 fn select_entry(config: &AppConfig) -> Option<SelectableTogglItem> {
-    let (toggle_items, selection_items) = build_selection_items_from(&config);
+    let (toggl_items, selection_items) = build_selection_items_from(&config);
     let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
         .items(&selection_items)
         .default(0)
@@ -96,7 +96,7 @@ fn select_entry(config: &AppConfig) -> Option<SelectableTogglItem> {
         .expect("TODO: handle this error");
 
     return match selection {
-        Some(index) => Some(toggle_items[index].clone()),
+        Some(index) => Some(toggl_items[index].clone()),
         None => return None,
     };
 }
